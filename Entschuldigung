@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entschuldigungen verwalten</title>
+    <link rel="stylesheet" href="styles.css?v=1.1"> <!-- Cache-Busting für CSS -->
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        h1, h2 {
+            text-align: center;
+            color: #444;
+        }
+
+        #container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
+        #calendar {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background-color: #fafafa;
+        }
+
+        #form-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        input[type="date"],
+        input[type="time"] {
+            padding: 10px;
+            margin: 10px;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 45%;
+        }
+
+        input[type="checkbox"] {
+            margin: 10px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .entry {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .entry:last-child {
+            border-bottom: none;
+        }
+
+        .entry button {
+            background-color: #dc3545;
+            padding: 5px 10px;
+            font-size: 0.9rem;
+        }
+
+        .entry button.edit {
+            background-color: #28a745;
+        }
+
+        .entry button:hover {
+            opacity: 0.9;
+        }
+
+        #exportPdf {
+            background-color: #ffc107;
+        }
+
+        #exportPdf:hover {
+            background-color: #e0a800;
+        }
+
+        #printPage {
+            background-color: #17a2b8;
+        }
+
+        #printPage:hover {
+            background-color: #138496;
+        }
+
+        .pdf-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .pdf-content {
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Entschuldigungen verwalten</h1>
+        <div id="calendar"></div>
+        <button id="exportPdf">Exportiere als PDF</button>
+        <button id="printPage">Drucken</button>
+        <div id="form-container">
+            <h2>Neue Entschuldigung hinzufügen</h2>
+            <input type="date" id="date" name="date" placeholder="Datum">
+            <input type="time" id="from" name="from" placeholder="Von">
+            <input type="time" id="to" name="to" placeholder="Bis">
+            <label>
+                <input type="checkbox" id="fullDay">
+                Ganzer Tag
+            </label>
+            <button id="saveEntry">Speichern</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+        import { getDatabase, ref, set, get, child, remove, update } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+
+// Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAoLX8JRxh11LywKkB1LD1L61III12kY-w",
+            authDomain: "entschuldigungen-385ff.firebaseapp.com",
+            databaseURL: "https://entschuldigungen-385ff-default-rtdb.firebaseio.com",
+            projectId: "entschuldigungen-385ff",
+            storageBucket: "entschuldigungen-385ff.appspot.com",
+            messagingSenderId: "452685107205",
+            appId: "1:452685107205:web:c05d829fcb47c11607cc6c"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const calendarElement = document.getElementById('calendar');
+            const saveButton = document.getElementById('saveEntry');
+            const exportButton = document.getElementById('exportPdf');
+            const printButton = document.getElementById('printPage');
+
+            function saveEntryToFirebase(entry) {
+                const newEntryKey = ref(db).push().key;
+                set(ref(db, 'entries/' + newEntryKey), entry);
+            }
+
+            function fetchEntries() {
+                get(child(ref(db), 'entries')).then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const entries = snapshot.val();
+                        renderCalendar(entries);
+                    } else {
+                        renderCalendar([]);
+                    }
+                });
+            }
+
+            function deleteEntryFromFirebase(key) {
+                remove(ref(db, 'entries/' + key));
+            }
+
+            function updateEntryInFirebase(key, updatedEntry) {
+                update(ref(db, 'entries/' + key), updatedEntry);
+            }
+
+            function renderCalendar(entries) {
+                calendarElement.innerHTML = '<h2>Kalenderansicht</h2>';
+                if (!entries || Object.keys(entries).length === 0) {
+                    calendarElement.innerHTML += '<p>Keine Entschuldigungen vorhanden.</p>';
+                } else {
+                    Object.keys(entries).forEach((key) => {
+                        const entry = entries[key];
+                        calendarElement.innerHTML += 
+                            <div class="entry">
+                                <span>${entry.date}: ${entry.fullDay ? 'Ganzer Tag' : Anwesend von ${entry.from} bis ${entry.to}}</span>
+                                <div>
+                                    <button class="edit" onclick="editEntry('${key}')">Bearbeiten</button>
+                                    <button onclick="deleteEntry('${key}')">Löschen</button>
+                                </div>
+                            </div>
+                        ;
+                    });
+                }
+            }
+
+            window.editEntry = function(key) {
+                const date = prompt('Neues Datum:', entries[key].date);
+                const fullDay = confirm('Ganzer Tag? (OK für Ja, Abbrechen für Nein)');
+                const from = fullDay ? '' : prompt('Neue Zeit von:', entries[key].from);
+                const to = fullDay ? '' : prompt('Neue Zeit bis:', entries[key].to);
+
+                if (date) {
+                    const updatedEntry = { date, fullDay, from: fullDay ? '' : from, to: fullDay ? '' : to };
+                    updateEntryInFirebase(key, updatedEntry);
+                    fetchEntries();
+                }
+            };
+
+            window.deleteEntry = function(key) {
+                if (confirm('Möchten Sie diesen Eintrag wirklich löschen?')) {
+                    deleteEntryFromFirebase(key);
+                    fetchEntries();
+                }
+            };
+
+            saveButton.addEventListener('click', () => {
+
+const date = document.getElementById('date').value;
+                const from = document.getElementById('from').value;
+                const to = document.getElementById('to').value;
+                const fullDay = document.getElementById('fullDay').checked;
+
+                if (date) {
+                    const entry = { date, fullDay, from: fullDay ? '' : from, to: fullDay ? '' : to };
+                    saveEntryToFirebase(entry);
+                    fetchEntries();
+                } else {
+                    alert('Bitte geben Sie ein Datum ein.');
+                }
+            });
+
+            exportButton.addEventListener('click', () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                let y = 20;
+
+                // Hintergrundfarbe und Rahmen für das PDF
+                doc.setFillColor(230, 230, 250); // helles Lila
+                doc.rect(5, 5, 200, 287, 'F'); // Hintergrund Rechteck
+
+                // Einleitungstext mit Rahmung
+                doc.setDrawColor(100); // grauer Rahmen
+                doc.setLineWidth(0.5);
+                doc.rect(10, 10, 190, 20); // Rechteck für Einleitung
+                doc.setFontSize(12);
+                doc.text('Hiermit möchte ich mich aufrichtig für meine Abwesenheit aufgrund gesundheitlicher', 15, y);
+                y += 6;
+                doc.text('Einschränkungen entschuldigen. Die Details meiner Anwesenheit und Abwesenheit sind wie folgt:', 15, y);
+                y += 20;
+
+                // Überschrift für die Entschuldigungen
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(0, 51, 153); // dunkles Blau
+                doc.text('Entschuldigungen von Melika Moheby', 15, y);
+                y += 10;
+
+                // Einträge hinzufügen
+                doc.setFont('times', 'normal');
+                doc.setFontSize(12);
+                doc.setTextColor(0); // zurück zu schwarz
+                get(child(ref(db), 'entries')).then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const entries = snapshot.val();
+                        Object.keys(entries).forEach((key, index) => {
+                            const entry = entries[key];
+                            const text = entry.fullDay
+                                ? ${entry.date}: Ganzer Tag
+                                : Anwesend von ${entry.from} bis ${entry.to};
+                            doc.text(• ${text}, 15, y);
+                            y += 10;
+                        });
+
+                        // Fußzeile
+                        doc.setDrawColor(180); // hellgrau
+                        doc.setLineWidth(0.5);
+                        doc.line(10, 280, 200, 280); // Linie oben der Fußzeile
+                        doc.setFontSize(10);
+                        doc.text('Melika Moheby - Entschuldigungen', 90, 285);
+
+                        // PDF speichern
+                        doc.save('entschuldigungen.pdf');
+                    }
+                });
+            });
+
+            printButton.addEventListener('click', () => {
+                window.print();
+            });
+
+            fetchEntries();
+        });
+    </script>
+
+    <!-- jsPDF Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+</body>
+</html>
